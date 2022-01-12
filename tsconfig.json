@@ -98,7 +98,7 @@
     // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
     "skipLibCheck": true /* Skip type checking all .d.ts files. */
   },
-  "exclude": ["Basic-types"] // would be the default
+  "exclude": ["Basic-types", "Classes and Interfaces"] // would be the default
   // "include": ["app.ts"], //specificly mention, if there is not in here, not compiled
   // "files": [] // only file to compile available not folder
 }
