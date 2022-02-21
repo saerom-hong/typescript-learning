@@ -1,3 +1,17 @@
+//drag and drop interfaces
+//add to any drag target
+interface Draggable {
+  dragStartHandler(event: DragEvent): void;
+  dragEndHandler(event: DragEvent): void;
+}
+
+interface DragTarget {
+  dragOverHandler(event: DragEvent): void;
+  //react to the actual drop
+  dropHandler(event: DragEvent): void;
+  dragLeaveHandler(event: DragEvent): void;
+}
+
 //Project Type
 //to specify listeners and projects type instead of using 'any'
 enum ProjectStatus {
@@ -43,7 +57,7 @@ class ProjectState {
   addProject(title: string, description: string, numOfPeople: number) {
     //instantiate Project class
     const newProjects = new Project(
-      Math.random.toString(),
+      Math.random().toString(),
       title,
       description,
       numOfPeople,
@@ -51,7 +65,22 @@ class ProjectState {
     );
 
     this.projects.push(newProjects);
-    //call all listener function eveytime projects state is changed
+    this.updateListeners();
+  }
+
+  //switch the status of a project
+
+  moveProject(projectId: string, newStatus: ProjectStatus) {
+    //have to identify which project is moving and which box is new box to have a project
+    const project = this.projects.find((prj) => prj.id === projectId);
+    if (project && project.status !== newStatus) {
+      project.status = newStatus;
+      this.updateListeners();
+    }
+  }
+
+  private updateListeners() {
+    //call all listener function eveytime projects state is changed -> re-render items
     for (const listenerFn of this.listeners) {
       //.slice() avoid mutate original array
       listenerFn(this.projects.slice());
@@ -121,6 +150,7 @@ function validate(validateInput: Validatable) {
 }
 
 //Component base class
+//take charge on basic rendering on the browser
 //put abstract keyword infront so never directly instantiated, always for inheritance
 abstract class Component<T extends HTMLElement, U extends HTMLElement> {
   templateElement: HTMLTemplateElement;
@@ -180,6 +210,7 @@ class ProjectInput extends Component<HTMLDivElement, HTMLFormElement> {
     this.configure();
     this.renderContent();
   }
+
   //public methods
   configure() {
     this.element.addEventListener("submit", this.submitHandler);
@@ -244,7 +275,10 @@ class ProjectInput extends Component<HTMLDivElement, HTMLFormElement> {
 }
 
 //ProjectList Class
-class ProjectList extends Component<HTMLDivElement, HTMLElement> {
+class ProjectList
+  extends Component<HTMLDivElement, HTMLElement>
+  implements DragTarget
+{
   assignedProjects: Project[];
 
   constructor(private type: "active" | "finished") {
@@ -253,14 +287,38 @@ class ProjectList extends Component<HTMLDivElement, HTMLElement> {
     this.configure();
     this.renderContent();
   }
-  //public methods
-  renderContent() {
-    const listId = `${this.type}-projects-list`;
-    this.element.querySelector("ul")!.id = listId;
-    this.element.querySelector("h2")!.textContent =
-      this.type.toUpperCase() + " Projects";
+  //from interfaces
+  @autobind
+  dragOverHandler(event: DragEvent) {
+    //will be called when you enter a draggable area with an item
+    if (event.dataTransfer && event.dataTransfer.types[0] === "text/plain") {
+      event.preventDefault();
+      const listEl = this.element.querySelector("ul")!;
+      listEl.classList.add("droppable");
+    }
   }
+  @autobind
+  dropHandler(event: DragEvent) {
+    const prjId = event.dataTransfer?.getData("text/plain")!;
+    projectState.moveProject(
+      prjId,
+      this.type === "active" ? ProjectStatus.Active : ProjectStatus.Finished
+    );
+  }
+  @autobind
+  dragLeaveHandler(_: DragEvent) {
+    const listEl = this.element.querySelector("ul")!;
+    listEl.classList.remove("droppable");
+  }
+
+  //public methods
+
   configure() {
+    //for drag and drop
+    this.element.addEventListener("dragover", this.dragOverHandler);
+    this.element.addEventListener("dragleave", this.dragLeaveHandler);
+    this.element.addEventListener("drop", this.dropHandler);
+
     //setup listener, before attach and render the content
     projectState.addListener((projects: Project[]) => {
       const relevantProjects = projects.filter((project) => {
@@ -272,6 +330,13 @@ class ProjectList extends Component<HTMLDivElement, HTMLElement> {
       this.assignedProjects = relevantProjects;
       this.renderProjects();
     });
+  }
+
+  renderContent() {
+    const listId = `${this.type}-projects-list`;
+    this.element.querySelector("ul")!.id = listId;
+    this.element.querySelector("h2")!.textContent =
+      this.type.toUpperCase() + " Projects";
   }
 
   private renderProjects() {
@@ -288,7 +353,10 @@ class ProjectList extends Component<HTMLDivElement, HTMLElement> {
   }
 }
 //rendering single project item
-class ProjectItem extends Component<HTMLUListElement, HTMLLIElement> {
+class ProjectItem
+  extends Component<HTMLUListElement, HTMLLIElement>
+  implements Draggable
+{
   private project: Project;
 
   get persons() {
@@ -306,7 +374,21 @@ class ProjectItem extends Component<HTMLUListElement, HTMLLIElement> {
     this.configure();
     this.renderContent();
   }
-  configure() {}
+
+  //from interfaces
+  @autobind
+  dragStartHandler(e: DragEvent) {
+    e.dataTransfer!.setData("text/plain", this.project.id);
+    e.dataTransfer!.effectAllowed = "move";
+  }
+  dragEndHandler(_: DragEvent) {
+    console.log("Drag ended");
+  }
+
+  configure() {
+    this.element.addEventListener("dragstart", this.dragStartHandler);
+    this.element.addEventListener("dragend", this.dragEndHandler);
+  }
   renderContent() {
     this.element.querySelector("h2")!.textContent = this.project.title;
     // to use getter method, access like a normal property not calling a function
